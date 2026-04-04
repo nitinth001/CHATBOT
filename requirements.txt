@@ -192,3 +192,5 @@ faiss-cpu
 sentence-transformers
 python-dotenv
 reportlab
+beautifulsoup4
+langchain-community

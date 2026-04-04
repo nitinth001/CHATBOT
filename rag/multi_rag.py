@@ -6,33 +6,24 @@ from io import BytesIO
 from dotenv import load_dotenv
 from reportlab.pdfgen import canvas
 
+# LangChain Imports
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_classic.chains import create_retrieval_chain
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader, WebBaseLoader # Added Web Loader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 
 load_dotenv()
 
-# --- v2.0 CUSTOM STYLING ---
-st.set_page_config(page_title="AI PDF Pro v2.0", layout="wide")
+# --- v3.0 STYLING ---
+st.set_page_config(page_title="AI Multi-Source Explorer", layout="wide")
 st.markdown("""
     <style>
     .main { background-color: #0e1117; color: #ffffff; }
-    .stButton>button { 
-        border-radius: 20px; 
-        border: 1px solid #ff4b4b; 
-        background-color: #0e1117; 
-        color: white; 
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #ff4b4b;
-        color: white;
-    }
+    .stButton>button { border-radius: 20px; border: 1px solid #00f2fe; background-color: #0e1117; color: white; }
     .stSidebar { background-color: #161b22; }
     </style>
     """, unsafe_allow_html=True)
@@ -46,133 +37,84 @@ llm = ChatGroq(model="llama-3.1-8b-instant", groq_api_key=os.getenv("GROQ_API_KE
 def generate_pdf_summary(text):
     buffer = BytesIO()
     p = canvas.Canvas(buffer)
-    p.setFont("Helvetica-Bold", 16)
-    p.drawString(100, 800, "AI Generated Analysis")
+    p.drawString(100, 800, "AI Analysis Report")
     p.line(100, 790, 500, 790)
-    
-    p.setFont("Helvetica", 10)
-    y = 760
-    # Simple wrap and draw
+    y = 770
     for line in text.split('\n'):
-        if y < 50:
-            p.showPage()
-            y = 800
-        # Prevent long lines from breaking the PDF
-        chunk_size = 85
-        chunks = [line[i:i+chunk_size] for i in range(0, len(line), chunk_size)]
-        for chunk in chunks:
-            p.drawString(100, y, chunk)
-            y -= 15
-    p.save()
-    buffer.seek(0)
+        if y < 50: p.showPage(); y = 800
+        p.drawString(100, y, line[:90])
+        y -= 15
+    p.save(); buffer.seek(0)
     return buffer
 
-st.title("🚀 AI PDF Pro v2.0")
+st.title("🌐 AI Multi-Source Explorer v3.0")
 
-# --- Sidebar ---
+# --- Sidebar: Hybrid Input ---
 with st.sidebar:
-    st.header("📂 Document Lab")
-    uploaded_files = st.file_uploader("Upload PDFs", type="pdf", accept_multiple_files=True)
-    process_btn = st.button("🚀 Index Everything")
+    st.header("🛠️ Data Sources")
+    source_type = st.radio("Choose Source:", ["📄 PDF Documents", "🔗 Website URL"])
     
+    if source_type == "📄 PDF Documents":
+        uploaded_files = st.file_uploader("Upload PDFs", type="pdf", accept_multiple_files=True)
+        process_btn = st.button("Index PDFs")
+    else:
+        web_url = st.text_input("Enter Website URL (e.g., https://example.com)")
+        process_btn = st.button("Index Website")
+
     st.divider()
-    if st.button("🗑️ Reset Knowledge Base"):
-        if os.path.exists("vectorstore"):
-            shutil.rmtree("vectorstore")
+    if st.button("🗑️ Reset All"):
+        if os.path.exists("vectorstore"): shutil.rmtree("vectorstore")
         st.session_state.messages = []
-        st.success("System Reset!")
         st.rerun()
 
-# --- Logic: Processing Multiple PDFs ---
-# ... (Keep imports and styling same as before) ...
-
-# Processing Logic Update
-if uploaded_files and process_btn:
+# --- v3.0 Logic: Handling PDF or Web ---
+if process_btn:
     all_docs = []
-    with st.spinner("Analyzing Documents..."):
-        for uploaded_file in uploaded_files:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                tmp.write(uploaded_file.getvalue())
-                tmp_path = tmp.name
-            
-            try:
-                loader = PyPDFLoader(tmp_path)
-                all_docs.extend(loader.load())
-            finally:
-                if os.path.exists(tmp_path):
+    with st.spinner("Indexing Source..."):
+        try:
+            if source_type == "📄 PDF Documents" and uploaded_files:
+                for uploaded_file in uploaded_files:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                        tmp.write(uploaded_file.getvalue())
+                        tmp_path = tmp.name
+                    loader = PyPDFLoader(tmp_path)
+                    all_docs.extend(loader.load())
                     os.remove(tmp_path)
-        
-        if not all_docs:
-            st.error("❌ No text could be extracted from these PDFs. Are they scanned images?")
-        else:
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-            splits = text_splitter.split_documents(all_docs)
             
-            # --- CRITICAL FIX: Safety check before creating FAISS ---
-            if splits:
+            elif source_type == "🔗 Website URL" and web_url:
+                loader = WebBaseLoader(web_url)
+                all_docs.extend(loader.load())
+            
+            if all_docs:
+                splits = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200).split_documents(all_docs)
                 vectorstore = FAISS.from_documents(splits, embeddings)
                 vectorstore.save_local(DB_PATH)
-                st.success(f"Successfully Indexed {len(uploaded_files)} PDF(s)!")
+                st.success("Successfully Indexed!")
             else:
-                st.warning("⚠️ The files were loaded but no text chunks were created.")
-
-# ... (Keep the rest of the chat logic same) ...
-        
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        splits = text_splitter.split_documents(all_docs)
-        
-        vectorstore = FAISS.from_documents(splits, embeddings)
-        vectorstore.save_local(DB_PATH)
-        st.success(f"Successfully Indexed {len(uploaded_files)} PDF(s)!")
+                st.warning("No data found to index.")
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
 
 # --- Chat Interface ---
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
+if "messages" not in st.session_state: st.session_state.messages = []
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+    with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
-user_input = st.chat_input("Ask a question about your documents...")
+user_input = st.chat_input("Ask about your data...")
 
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user"):
-        st.markdown(user_input)
+    with st.chat_message("user"): st.markdown(user_input)
 
     if os.path.exists(DB_PATH):
         vectorstore = FAISS.load_local(DB_PATH, embeddings, allow_dangerous_deserialization=True)
+        prompt = ChatPromptTemplate.from_template("Answer using context: {context}\nQuestion: {input}")
+        retrieval_chain = create_retrieval_chain(vectorstore.as_retriever(), create_stuff_documents_chain(llm, prompt))
         
-        # PROMPT with Citation instructions
-        prompt = ChatPromptTemplate.from_template("""
-        Answer accurately using the context. 
-        At the end of your answer, list the source page numbers.
-        Context: {context}
-        Question: {input}""")
-        
-        combine_chain = create_stuff_documents_chain(llm, prompt)
-        retrieval_chain = create_retrieval_chain(vectorstore.as_retriever(), combine_chain)
-        
-        with st.spinner("Thinking..."):
-            response = retrieval_chain.invoke({"input": user_input})
-            answer = response['answer']
-            
-            # Extract page numbers from metadata
-            pages = set([str(doc.metadata.get('page', 0) + 1) for doc in response['context']])
-            citation_text = f"\n\n**Sources:** Page(s) {', '.join(sorted(pages))}"
-            full_response = answer + citation_text
+        response = retrieval_chain.invoke({"input": user_input})
+        full_response = response['answer']
 
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-            with st.chat_message("assistant"):
-                st.markdown(full_response)
-                
-                # Download Button for the specific response
-                pdf_file = generate_pdf_summary(full_response)
-                st.download_button(
-                    label="📥 Download this Answer as PDF",
-                    data=pdf_file,
-                    file_name="ai_analysis.pdf",
-                    mime="application/pdf"
-                )
-    else:
-        st.info("Please upload and index a PDF to activate the AI.")
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        with st.chat_message("assistant"):
+            st.markdown(full_response)
+            st.download_button("📥 Export PDF", generate_pdf_summary(full_response), "report.pdf", "application/pdf")
