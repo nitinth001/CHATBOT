@@ -20,7 +20,7 @@ from langchain_community.vectorstores import FAISS
 
 load_dotenv()
 
-# --- v6.0 CYBER-TRUST UI ---
+# --- v7.0 HYBRID CYBER-TRUST UI ---
 st.set_page_config(page_title="GENZ-AI PRO", layout="wide", page_icon="⚡")
 
 st.markdown("""
@@ -36,7 +36,6 @@ st.markdown("""
     .hero-sub {
         text-align: center; color: #4facfe; margin-bottom: 30px; font-weight: 300;
     }
-    /* Source Box Styling */
     .source-box {
         background: rgba(0, 242, 254, 0.05);
         border-left: 3px solid #00f2fe;
@@ -44,11 +43,8 @@ st.markdown("""
         font-size: 0.85rem; color: #a0a0a0;
         border-radius: 5px;
     }
-    /* Custom Scrollbar */
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-thumb { background: #00f2fe; border-radius: 10px; }
-    
-    /* Neon Sidebar */
     [data-testid="stSidebar"] {
         background: rgba(15, 52, 96, 0.8) !important;
         backdrop-filter: blur(10px);
@@ -102,17 +98,15 @@ with st.sidebar:
 st.markdown('<p class="hero-text">GENZ-AI PRO</p>', unsafe_allow_html=True)
 st.markdown('<p class="hero-sub">Secure AI Intelligence Engine</p>', unsafe_allow_html=True)
 
-# Chat State Initialization
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Display Message History
 for message in st.session_state.chat_history:
     role = "user" if isinstance(message, HumanMessage) else "assistant"
     with st.chat_message(role):
         st.markdown(message.content)
 
-# Data Ingestion Logic
+# Data Ingestion
 if process_btn:
     docs = []
     with st.spinner("🚀 Engineering Knowledge Space..."):
@@ -128,7 +122,6 @@ if process_btn:
                 st.error(f"Crawl Failed: {e}")
         
         if docs:
-            # Recursive splitting for better semantic retrieval
             splits = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150).split_documents(docs)
             vectorstore = FAISS.from_documents(splits, embeddings)
             vectorstore.save_local(DB_PATH)
@@ -140,56 +133,85 @@ if process_btn:
 query = st.chat_input("Command GENZ-AI...")
 
 if query:
-    # Display user query
     with st.chat_message("user"):
         st.markdown(query)
 
+    # CHECK IF WE HAVE DEEP KNOWLEDGE (RAG)
     if os.path.exists(DB_PATH):
         vs = FAISS.load_local(DB_PATH, embeddings, allow_dangerous_deserialization=True)
         
-        # 1. History-Aware Retriever: Rewrites question to include past context
+        # 1. History-Aware Retriever
         context_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Given the chat history and the latest user question, formulate a standalone question."),
+            ("system", "Given history and the user question, create a standalone query for search."),
             MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
         ])
         retriever = create_history_aware_retriever(llm, vs.as_retriever(search_kwargs={"k": 3}), context_prompt)
 
-        # 2. QA Chain: Answers based on retrieved context
+        # 2. HYBRID QA Chain: Prioritize context but allow general knowledge
+        qa_system_prompt = (
+            "You are GENZ-AI PRO. Follow these rules:\n"
+            "1. If the provided 'context' contains the answer, use it and cite the source.\n"
+            "2. If the context is irrelevant or missing the answer, use your own internal knowledge to provide a helpful response.\n"
+            "3. Maintain a professional yet modern tone.\n\n"
+            "Context: {context}"
+        )
+        
         qa_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Answer the question using ONLY the following context. If the answer isn't there, say you don't know. Context: {context}"),
+            ("system", qa_system_prompt),
             MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
         ])
         
-        # Retrieval Chain returns BOTH answer and the context documents
         chain = create_retrieval_chain(retriever, create_stuff_documents_chain(llm, qa_prompt))
 
         with st.spinner("Analyzing Intelligence..."):
             res = chain.invoke({"input": query, "chat_history": st.session_state.chat_history})
+            answer = res["answer"]
             
             with st.chat_message("assistant"):
-                # Simulation of real-time streaming
                 placeholder = st.empty()
                 full_response = ""
-                for chunk in res["answer"].split():
+                for chunk in answer.split():
                     full_response += chunk + " "
                     placeholder.markdown(full_response + "▌")
                     time.sleep(0.04)
                 placeholder.markdown(full_response)
                 
-                # CITATION UI: Showing the proof
-                with st.expander("📚 View Verified Sources"):
-                    for i, doc in enumerate(res["context"]):
-                        source_info = doc.metadata.get('source', 'Web Source')
-                        page_info = f" | Page: {doc.metadata.get('page', 'N/A')}" if 'page' in doc.metadata else ""
-                        st.markdown(f"**Ref {i+1}:** `{source_info}{page_info}`")
-                        st.markdown(f'<div class="source-box">"{doc.page_content[:250]}..."</div>', unsafe_allow_html=True)
+                # Show citations only if context was used
+                if res.get("context"):
+                    with st.expander("📚 View Verified Sources"):
+                        for i, doc in enumerate(res["context"]):
+                            source_info = doc.metadata.get('source', 'Reference')
+                            page_info = f" | Page: {doc.metadata.get('page', 'N/A')}" if 'page' in doc.metadata else ""
+                            st.markdown(f"**Ref {i+1}:** `{source_info}{page_info}`")
+                            st.markdown(f'<div class="source-box">"{doc.page_content[:250]}..."</div>', unsafe_allow_html=True)
                 
-                # Export Action
-                st.download_button("💾 DL ANALYSIS", generate_pdf_summary(res["answer"]), f"GENZ_PRO_{int(time.time())}.pdf")
+                st.download_button("💾 DL ANALYSIS", generate_pdf_summary(answer), f"GENZ_PRO_{int(time.time())}.pdf")
             
-            # Update Persistent History
-            st.session_state.chat_history.extend([HumanMessage(content=query), AIMessage(content=res["answer"])])
+            st.session_state.chat_history.extend([HumanMessage(content=query), AIMessage(content=answer)])
+
+    # FALLBACK: If no PDF is uploaded, act as a standard Chatbot
     else:
-        st.info("System is offline. Please initialize a Knowledge Base in the sidebar.")
+        with st.chat_message("assistant"):
+            chat_prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are GENZ-AI PRO, a helpful AI. No external files are uploaded currently, so use your own knowledge."),
+                MessagesPlaceholder("chat_history"),
+                ("human", "{input}"),
+            ])
+            # Direct chain without retrieval
+            response = llm.invoke(chat_prompt.format_messages(input=query, chat_history=st.session_state.chat_history))
+            
+            placeholder = st.empty()
+            full_response = ""
+            for chunk in response.content.split():
+                full_response += chunk + " "
+                placeholder.markdown(full_response + "▌")
+                time.sleep(0.04)
+            placeholder.markdown(full_response)
+            
+            st.session_state.chat_history.extend([HumanMessage(content=query), AIMessage(content=response.content)])
+
+# Status Footer
+if not os.path.exists(DB_PATH):
+    st.info("💡 GENZ-AI is in General Mode. Sync a Knowledge Base for Deep Research.")
