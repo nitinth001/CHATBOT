@@ -194,3 +194,14 @@ python-dotenv
 reportlab
 beautifulsoup4
 langchain-community
+streamlit
+langchain-classic
+langchain-groq
+langchain-huggingface
+langchain-community
+pypdf
+faiss-cpu
+sentence-transformers
+python-dotenv
+reportlab
+beautifulsoup4
