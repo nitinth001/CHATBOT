@@ -20,47 +20,71 @@ from langchain_community.vectorstores import FAISS
 
 load_dotenv()
 
-# --- v5.0 CHATGPT-STYLE CSS ---
-st.set_page_config(page_title="Nexus AI Engine", layout="wide", page_icon="🤖")
+# --- v5.1 NEON CYBERPUNK UI ---
+st.set_page_config(page_title="GENZ-AI", layout="wide", page_icon="⚡")
 
 st.markdown("""
     <style>
-    /* Main Background */
-    .stApp { background-color: #212121; }
-    
-    /* ChatGPT-style Chat Bubbles */
-    .stChatMessage {
-        background-color: #2f2f2f !important;
-        border: 1px solid #424242 !important;
-        border-radius: 15px !important;
-        padding: 15px !important;
-        margin-bottom: 20px !important;
-        max-width: 85% !important;
+    /* Main Background & Fonts */
+    .stApp { 
+        background: radial-gradient(circle at top right, #1a1a2e, #16213e, #0f3460);
+        color: #e94560;
     }
     
-    /* Metrics glassmorphism */
-    .metric-container {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 10px;
-        padding: 15px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+    /* Neon Title Gradient */
+    .hero-text {
+        font-size: 3.5rem;
+        font-weight: 800;
+        background: -webkit-linear-gradient(#00f2fe, #4facfe);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         text-align: center;
+        margin-bottom: 0px;
     }
 
-    /* Hide Streamlit branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-
-    /* Professional Sidebar */
+    /* Glassmorphism Sidebar */
     [data-testid="stSidebar"] {
-        background-color: #171717 !important;
-        border-right: 1px solid #303030;
+        background: rgba(15, 52, 96, 0.8) !important;
+        backdrop-filter: blur(10px);
+        border-right: 1px solid #00f2fe;
     }
+
+    /* Glowing Chat Bubbles */
+    .stChatMessage {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(0, 242, 254, 0.3) !important;
+        border-radius: 20px !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        margin-bottom: 15px !important;
+    }
+
+    /* Buttons with Neon Glow */
+    .stButton>button {
+        width: 100%;
+        border-radius: 25px !important;
+        border: 1px solid #00f2fe !important;
+        background: transparent !important;
+        color: #00f2fe !important;
+        font-weight: bold !important;
+        transition: 0.4s;
+    }
+    .stButton>button:hover {
+        background: #00f2fe !important;
+        color: #1a1a2e !important;
+        box-shadow: 0 0 20px #00f2fe;
+    }
+
+    /* Chat Input Styling */
+    .stChatInputContainer {
+        padding-bottom: 20px !important;
+    }
+
+    /* Hide redundant elements */
+    header, footer {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
-# Persistent Config
+# Configuration
 DB_PATH = "vectorstore/db_faiss"
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 llm = ChatGroq(model="llama-3.1-8b-instant")
@@ -70,7 +94,7 @@ def generate_pdf_summary(text):
     buffer = BytesIO()
     p = canvas.Canvas(buffer)
     p.setFont("Helvetica-Bold", 14)
-    p.drawString(70, 800, "Nexus AI: Executive Summary")
+    p.drawString(70, 800, "GENZ-AI: Data Insight Report")
     p.line(70, 790, 520, 790)
     p.setFont("Helvetica", 10)
     y = 760
@@ -80,40 +104,34 @@ def generate_pdf_summary(text):
     p.save(); buffer.seek(0)
     return buffer
 
-# --- SIDEBAR: PRODUCT CONFIG ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.title("🤖 Nexus AI")
-    st.caption("v5.0 Enterprise Edition")
+    st.markdown("<h1 style='color: #00f2fe;'>⚡ GENZ-AI</h1>", unsafe_allow_html=True)
+    st.caption("Pushing RAG to the limit.")
     
-    source = st.selectbox("Intelligence Mode", ["Document PDF", "Web URL Crawler"])
+    source = st.radio("Select Input", ["📂 PDF Files", "🌐 Live Link"])
     
     st.markdown("---")
-    if source == "Document PDF":
-        files = st.file_uploader("Upload Knowledge Base", type="pdf", accept_multiple_files=True)
-        process_btn = st.button("Initialize Engine", use_container_width=True)
+    if source == "📂 PDF Files":
+        files = st.file_uploader("Drop Files", type="pdf", accept_multiple_files=True)
+        process_btn = st.button("SYNC KNOWLEDGE")
     else:
-        url = st.text_input("Source URL")
-        process_btn = st.button("Crawl Intelligence", use_container_width=True)
+        url = st.text_input("URL Link")
+        process_btn = st.button("CRAWL WEB")
 
-    st.markdown("---")
-    st.subheader("📊 System Diagnostics")
-    c1, c2 = st.columns(2)
-    with c1: st.markdown('<div class="metric-container"><small>Memory</small><br><b>Active</b></div>', unsafe_allow_html=True)
-    with c2: st.markdown('<div class="metric-container"><small>Latency</small><br><b>14ms</b></div>', unsafe_allow_html=True)
-
-    if st.sidebar.button("Clear Session History", use_container_width=True):
+    if st.button("PURGE MEMORY"):
         if os.path.exists("vectorstore"): shutil.rmtree("vectorstore")
         st.session_state.chat_history = []
         st.rerun()
 
-# --- CHAT INTERFACE ---
+# --- HERO SECTION ---
+st.markdown('<p class="hero-text">GENZ-AI</p>', unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4facfe;'>What's the move today?</p>", unsafe_allow_html=True)
+
+# Chat State
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Title at the top center
-st.markdown("<h2 style='text-align: center; color: white;'>How can I help you today?</h2>", unsafe_allow_html=True)
-
-# Display Chat History
 for message in st.session_state.chat_history:
     role = "user" if isinstance(message, HumanMessage) else "assistant"
     with st.chat_message(role):
@@ -122,8 +140,8 @@ for message in st.session_state.chat_history:
 # Data Processing
 if process_btn:
     docs = []
-    with st.spinner("Processing knowledge vectors..."):
-        if source == "Document PDF" and files:
+    with st.spinner("Processing..."):
+        if source == "📂 PDF Files" and files:
             for f in files:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                     tmp.write(f.getvalue()); path = tmp.name
@@ -135,12 +153,12 @@ if process_btn:
             splits = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200).split_documents(docs)
             vectorstore = FAISS.from_documents(splits, embeddings)
             vectorstore.save_local(DB_PATH)
-            st.success("Indexing Synchronized.")
+            st.success("System Synchronized.")
         else:
-            st.error("Input source empty.")
+            st.error("Target source is empty.")
 
-# User Input
-query = st.chat_input("Message Nexus AI...")
+# Interaction
+query = st.chat_input("Talk to GENZ-AI...")
 
 if query:
     with st.chat_message("user"):
@@ -149,31 +167,30 @@ if query:
     if os.path.exists(DB_PATH):
         vs = FAISS.load_local(DB_PATH, embeddings, allow_dangerous_deserialization=True)
         
-        # Memory Retriever
+        # Memory-Enhanced Retrieval
         context_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Given history and question, create a standalone query."),
+            ("system", "Keep it cool and accurate. Contextualize the prompt based on history."),
             MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
         ])
         retriever = create_history_aware_retriever(llm, vs.as_retriever(), context_prompt)
 
-        # Q&A Logic
+        # Response Chain
         qa_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Answer based on context: {context}"),
+            ("system", "You are GENZ-AI. Use the context: {context}"),
             MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
         ])
         
         chain = create_retrieval_chain(retriever, create_stuff_documents_chain(llm, qa_prompt))
 
-        with st.spinner(""): # Minimalist thinking indicator
+        with st.spinner(""): 
             res = chain.invoke({"input": query, "chat_history": st.session_state.chat_history})
             
             with st.chat_message("assistant"):
                 st.markdown(res["answer"])
-                # Sleek download button
-                st.download_button("💾 Save Export", generate_pdf_summary(res["answer"]), f"Nexus_{int(time.time())}.pdf")
+                st.download_button("💾 DL ANALYSIS", generate_pdf_summary(res["answer"]), f"GENZ_{int(time.time())}.pdf")
             
             st.session_state.chat_history.extend([HumanMessage(content=query), AIMessage(content=res["answer"])])
     else:
-        st.info("Please initialize the knowledge base in the sidebar.")
+        st.info("Feed me some data to get started.")
