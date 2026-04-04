@@ -35,15 +35,26 @@ with st.sidebar:
             st.rerun()
 
 # Processing Logic
+# --- Logic: Processing Multiple PDFs ---
 if uploaded_files and process_btn:
     all_docs = []
-    with st.spinner("Processing..."):
+    with st.spinner("Processing your PDFs..."):
         for uploaded_file in uploaded_files:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                tmp.write(uploaded_file.getvalue())
-                loader = PyPDFLoader(tmp.name)
+            # FIX: Write to temp file and CLOSE it before loading
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                tmp_file.write(uploaded_file.getvalue())
+                tmp_path = tmp_file.name  # Save the path
+            
+            # Now that the file is closed, the data is safely on disk
+            try:
+                loader = PyPDFLoader(tmp_path)
                 all_docs.extend(loader.load())
-            os.remove(tmp.name)
+            finally:
+                # Always delete the temp file after loading
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+        
+        # ... rest of your splitting and indexing code ...
         
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         splits = text_splitter.split_documents(all_docs)
