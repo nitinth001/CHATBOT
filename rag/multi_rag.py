@@ -20,66 +20,40 @@ from langchain_community.vectorstores import FAISS
 
 load_dotenv()
 
-# --- v5.1 NEON CYBERPUNK UI ---
-st.set_page_config(page_title="GENZ-AI", layout="wide", page_icon="⚡")
+# --- v6.0 CYBER-TRUST UI ---
+st.set_page_config(page_title="GENZ-AI PRO", layout="wide", page_icon="⚡")
 
 st.markdown("""
     <style>
-    /* Main Background & Fonts */
-    .stApp { 
-        background: radial-gradient(circle at top right, #1a1a2e, #16213e, #0f3460);
-        color: #e94560;
-    }
-    
-    /* Neon Title Gradient */
+    .stApp { background: #0b0e14; color: #e0e0e0; }
     .hero-text {
-        font-size: 3.5rem;
-        font-weight: 800;
-        background: -webkit-linear-gradient(#00f2fe, #4facfe);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        font-size: 3.5rem; font-weight: 900;
+        background: linear-gradient(90deg, #00f2fe, #4facfe);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         text-align: center;
         margin-bottom: 0px;
     }
-
-    /* Glassmorphism Sidebar */
+    .hero-sub {
+        text-align: center; color: #4facfe; margin-bottom: 30px; font-weight: 300;
+    }
+    /* Source Box Styling */
+    .source-box {
+        background: rgba(0, 242, 254, 0.05);
+        border-left: 3px solid #00f2fe;
+        padding: 10px; margin-top: 10px;
+        font-size: 0.85rem; color: #a0a0a0;
+        border-radius: 5px;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-thumb { background: #00f2fe; border-radius: 10px; }
+    
+    /* Neon Sidebar */
     [data-testid="stSidebar"] {
         background: rgba(15, 52, 96, 0.8) !important;
         backdrop-filter: blur(10px);
         border-right: 1px solid #00f2fe;
     }
-
-    /* Glowing Chat Bubbles */
-    .stChatMessage {
-        background: rgba(255, 255, 255, 0.05) !important;
-        border: 1px solid rgba(0, 242, 254, 0.3) !important;
-        border-radius: 20px !important;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-        margin-bottom: 15px !important;
-    }
-
-    /* Buttons with Neon Glow */
-    .stButton>button {
-        width: 100%;
-        border-radius: 25px !important;
-        border: 1px solid #00f2fe !important;
-        background: transparent !important;
-        color: #00f2fe !important;
-        font-weight: bold !important;
-        transition: 0.4s;
-    }
-    .stButton>button:hover {
-        background: #00f2fe !important;
-        color: #1a1a2e !important;
-        box-shadow: 0 0 20px #00f2fe;
-    }
-
-    /* Chat Input Styling */
-    .stChatInputContainer {
-        padding-bottom: 20px !important;
-    }
-
-    /* Hide redundant elements */
     header, footer {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
@@ -94,7 +68,7 @@ def generate_pdf_summary(text):
     buffer = BytesIO()
     p = canvas.Canvas(buffer)
     p.setFont("Helvetica-Bold", 14)
-    p.drawString(70, 800, "GENZ-AI: Data Insight Report")
+    p.drawString(70, 800, "GENZ-AI PRO: Official Insight Report")
     p.line(70, 790, 520, 790)
     p.setFont("Helvetica", 10)
     y = 760
@@ -106,91 +80,116 @@ def generate_pdf_summary(text):
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.markdown("<h1 style='color: #00f2fe;'>⚡ GENZ-AI</h1>", unsafe_allow_html=True)
-    st.caption("Pushing RAG to the limit.")
-    
-    source = st.radio("Select Input", ["📂 PDF Files", "🌐 Live Link"])
+    st.markdown("<h1 style='color: #00f2fe;'>⚡ GENZ-AI PRO</h1>", unsafe_allow_html=True)
+    source = st.radio("Intelligence Mode", ["📂 Assets (PDF)", "🌐 Web Crawler"])
     
     st.markdown("---")
-    if source == "📂 PDF Files":
-        files = st.file_uploader("Drop Files", type="pdf", accept_multiple_files=True)
-        process_btn = st.button("SYNC KNOWLEDGE")
+    if source == "📂 Assets (PDF)":
+        files = st.file_uploader("Upload Knowledge Base", type="pdf", accept_multiple_files=True)
+        process_btn = st.button("SYNC BASE")
     else:
-        url = st.text_input("URL Link")
-        process_btn = st.button("CRAWL WEB")
+        url = st.text_input("Enter Target URL")
+        process_btn = st.button("CRAWL SOURCE")
 
-    if st.button("PURGE MEMORY"):
+    st.markdown("---")
+    if st.button("HARD RESET SYSTEM"):
         if os.path.exists("vectorstore"): shutil.rmtree("vectorstore")
         st.session_state.chat_history = []
+        st.success("Memory Purged")
         st.rerun()
 
 # --- HERO SECTION ---
-st.markdown('<p class="hero-text">GENZ-AI</p>', unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #4facfe;'>What's the move today?</p>", unsafe_allow_html=True)
+st.markdown('<p class="hero-text">GENZ-AI PRO</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-sub">Secure AI Intelligence Engine</p>', unsafe_allow_html=True)
 
-# Chat State
+# Chat State Initialization
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
+# Display Message History
 for message in st.session_state.chat_history:
     role = "user" if isinstance(message, HumanMessage) else "assistant"
     with st.chat_message(role):
         st.markdown(message.content)
 
-# Data Processing
+# Data Ingestion Logic
 if process_btn:
     docs = []
-    with st.spinner("Processing..."):
-        if source == "📂 PDF Files" and files:
+    with st.spinner("🚀 Engineering Knowledge Space..."):
+        if source == "📂 Assets (PDF)" and files:
             for f in files:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                     tmp.write(f.getvalue()); path = tmp.name
                 docs.extend(PyPDFLoader(path).load()); os.remove(path)
         elif url:
-            docs.extend(WebBaseLoader(url).load())
+            try:
+                docs.extend(WebBaseLoader(url).load())
+            except Exception as e:
+                st.error(f"Crawl Failed: {e}")
         
         if docs:
-            splits = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200).split_documents(docs)
+            # Recursive splitting for better semantic retrieval
+            splits = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150).split_documents(docs)
             vectorstore = FAISS.from_documents(splits, embeddings)
             vectorstore.save_local(DB_PATH)
-            st.success("System Synchronized.")
+            st.success("Vector Store Synchronized!")
         else:
-            st.error("Target source is empty.")
+            st.error("No intelligence detected in source.")
 
-# Interaction
-query = st.chat_input("Talk to GENZ-AI...")
+# Interaction Layer
+query = st.chat_input("Command GENZ-AI...")
 
 if query:
+    # Display user query
     with st.chat_message("user"):
         st.markdown(query)
 
     if os.path.exists(DB_PATH):
         vs = FAISS.load_local(DB_PATH, embeddings, allow_dangerous_deserialization=True)
         
-        # Memory-Enhanced Retrieval
+        # 1. History-Aware Retriever: Rewrites question to include past context
         context_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Keep it cool and accurate. Contextualize the prompt based on history."),
+            ("system", "Given the chat history and the latest user question, formulate a standalone question."),
             MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
         ])
-        retriever = create_history_aware_retriever(llm, vs.as_retriever(), context_prompt)
+        retriever = create_history_aware_retriever(llm, vs.as_retriever(search_kwargs={"k": 3}), context_prompt)
 
-        # Response Chain
+        # 2. QA Chain: Answers based on retrieved context
         qa_prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are GENZ-AI. Use the context: {context}"),
+            ("system", "Answer the question using ONLY the following context. If the answer isn't there, say you don't know. Context: {context}"),
             MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
         ])
         
+        # Retrieval Chain returns BOTH answer and the context documents
         chain = create_retrieval_chain(retriever, create_stuff_documents_chain(llm, qa_prompt))
 
-        with st.spinner(""): 
+        with st.spinner("Analyzing Intelligence..."):
             res = chain.invoke({"input": query, "chat_history": st.session_state.chat_history})
             
             with st.chat_message("assistant"):
-                st.markdown(res["answer"])
-                st.download_button("💾 DL ANALYSIS", generate_pdf_summary(res["answer"]), f"GENZ_{int(time.time())}.pdf")
+                # Simulation of real-time streaming
+                placeholder = st.empty()
+                full_response = ""
+                for chunk in res["answer"].split():
+                    full_response += chunk + " "
+                    placeholder.markdown(full_response + "▌")
+                    time.sleep(0.04)
+                placeholder.markdown(full_response)
+                
+                # CITATION UI: Showing the proof
+                with st.expander("📚 View Verified Sources"):
+                    for i, doc in enumerate(res["context"]):
+                        source_info = doc.metadata.get('source', 'Web Source')
+                        page_info = f" | Page: {doc.metadata.get('page', 'N/A')}" if 'page' in doc.metadata else ""
+                        st.markdown(f"**Ref {i+1}:** `{source_info}{page_info}`")
+                        st.markdown(f'<div class="source-box">"{doc.page_content[:250]}..."</div>', unsafe_allow_html=True)
+                
+                # Export Action
+                st.download_button("💾 DL ANALYSIS", generate_pdf_summary(res["answer"]), f"GENZ_PRO_{int(time.time())}.pdf")
             
+            # Update Persistent History
             st.session_state.chat_history.extend([HumanMessage(content=query), AIMessage(content=res["answer"])])
     else:
-        st.info("Feed me some data to get started.")
+        st.info("System is offline. Please initialize a Knowledge Base in the sidebar.")
