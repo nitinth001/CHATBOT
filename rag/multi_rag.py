@@ -84,11 +84,13 @@ with st.sidebar:
         st.rerun()
 
 # --- Logic: Processing Multiple PDFs ---
+# ... (Keep imports and styling same as before) ...
+
+# Processing Logic Update
 if uploaded_files and process_btn:
     all_docs = []
     with st.spinner("Analyzing Documents..."):
         for uploaded_file in uploaded_files:
-            # Securely handle temp files to avoid EmptyFileError
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(uploaded_file.getvalue())
                 tmp_path = tmp.name
@@ -99,6 +101,22 @@ if uploaded_files and process_btn:
             finally:
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
+        
+        if not all_docs:
+            st.error("❌ No text could be extracted from these PDFs. Are they scanned images?")
+        else:
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+            splits = text_splitter.split_documents(all_docs)
+            
+            # --- CRITICAL FIX: Safety check before creating FAISS ---
+            if splits:
+                vectorstore = FAISS.from_documents(splits, embeddings)
+                vectorstore.save_local(DB_PATH)
+                st.success(f"Successfully Indexed {len(uploaded_files)} PDF(s)!")
+            else:
+                st.warning("⚠️ The files were loaded but no text chunks were created.")
+
+# ... (Keep the rest of the chat logic same) ...
         
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         splits = text_splitter.split_documents(all_docs)
