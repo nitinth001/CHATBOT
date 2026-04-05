@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-# LangChain - Using the specific langchain_classic chains as requested
+# LangChain - Preserving your requested "Classic" chains
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
@@ -34,7 +34,7 @@ if not GROQ_API_KEY:
 # ==============================
 # ⚙️ CONFIG
 # ==============================
-st.set_page_config(page_title="GENZ-AI", layout="wide")
+st.set_page_config(page_title="GENZ-AI | Universal", layout="wide")
 DB_PATH = "vectorstore/db_faiss"
 
 # ==============================
@@ -54,16 +54,17 @@ st.markdown("""
     background: linear-gradient(90deg, #38bdf8, #6366f1);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    margin-bottom: 0px;
 }
 .hero-sub {
     text-align: center;
     color: #94a3b8;
+    margin-bottom: 2rem;
 }
 [data-testid="stSidebar"] {
     background: rgba(15, 23, 42, 0.7);
     backdrop-filter: blur(20px);
 }
-header, footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -93,12 +94,14 @@ def generate_pdf_summary(text):
     styles = getSampleStyleSheet()
 
     content = []
-    content.append(Paragraph("GENZ-AI Insight Report", styles["Title"]))
+    content.append(Paragraph("GENZ-AI Insights Report", styles["Title"]))
     content.append(Spacer(1, 12))
 
     for line in text.split("\n"):
         if line.strip():
-            content.append(Paragraph(line, styles["Normal"]))
+            # Basic cleanup for reportlab
+            clean_line = line.replace('*', '').replace('#', '')
+            content.append(Paragraph(clean_line, styles["Normal"]))
             content.append(Spacer(1, 8))
 
     doc.build(content)
@@ -106,7 +109,7 @@ def generate_pdf_summary(text):
     return buffer
 
 # ==============================
-# 🧠 VECTOR STORE
+# 🧠 VECTOR STORE LOGIC
 # ==============================
 def create_vectorstore(docs):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
@@ -120,20 +123,17 @@ def load_vectorstore():
     return None
 
 # ==============================
-# 🧠 PROMPTS
+# 🧠 GENERALIZED PROMPTS
 # ==============================
-# Improved prompt to handle tables and calculations from your assignment accurately
 def get_rag_prompt():
     return ChatPromptTemplate.from_messages([
         ("system",
-         "You are an expert AI tutor helping with a Machine Learning assignment.\n\n"
-         "Use the provided context to answer the question. If the context contains a data table, "
-         "read every row carefully before performing calculations (like Naive Bayes or ID3).\n\n"
+         "You are an expert AI assistant. Use the provided context to answer the user's request.\n\n"
          "Context:\n{context}\n\n"
          "Instructions:\n"
-         "1. Show step-by-step mathematical work for numerical problems.\n"
-         "2. Provide a clear Python implementation using libraries like NumPy or Scikit-Learn if relevant.\n"
-         "3. Format code strictly using ```python blocks."
+         "1. If the query requires calculations or logic, show step-by-step work.\n"
+         "2. Provide Python code examples using ```python blocks where helpful.\n"
+         "3. If the answer is not in the context, use your general knowledge but clarify that it's not in the documents."
         ),
         MessagesPlaceholder("chat_history"),
         ("human", "{input}")
@@ -142,7 +142,7 @@ def get_rag_prompt():
 def get_normal_prompt():
     return ChatPromptTemplate.from_messages([
         ("system",
-         "You are a helpful AI tutor. Explain clearly and provide Python code examples when relevant."
+         "You are a helpful and witty AI assistant. Provide clear explanations and code examples when relevant."
         ),
         MessagesPlaceholder("chat_history"),
         ("human", "{input}")
@@ -151,61 +151,53 @@ def get_normal_prompt():
 # ==============================
 # 🎯 HEADER
 # ==============================
-st.markdown('<p class="hero-text">🤖 GENZ-AI</p>', unsafe_allow_html=True)
-st.markdown('<p class="hero-sub">AI Tutor + RAG System (Classic Edition)</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-text">GENZ-AI</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-sub">Universal AI Assistant: PDF Research • Web Analysis • General Chat</p>', unsafe_allow_html=True)
 
-# ==============================
-# 💬 SESSION
-# ==============================
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # ==============================
-# 📂 SIDEBAR
+# 📂 SIDEBAR (Source Selection)
 # ==============================
 with st.sidebar:
-    st.header("Control Panel")
-    source = st.radio("Select Source", ["PDF", "Web"])
+    st.header("🛠️ Configuration")
+    source_type = st.selectbox("Intelligence Source", ["None (General Chat)", "PDF Upload", "Web URL"])
 
-    if source == "PDF":
-        files = st.file_uploader("Upload PDFs", type="pdf", accept_multiple_files=True)
-    else:
-        url = st.text_input("Enter URL")
+    docs = []
+    if source_type == "PDF Upload":
+        files = st.file_uploader("Upload Documents", type="pdf", accept_multiple_files=True)
+        if st.button("Index PDFs"):
+            with st.spinner("Reading PDFs..."):
+                for f in files:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                        tmp.write(f.read())
+                        docs.extend(PyPDFLoader(tmp.name).load())
+                        os.remove(tmp.name)
+                if docs:
+                    create_vectorstore(docs)
+                    st.success("Vector Database Created!")
 
-    process = st.button("Process Data")
+    elif source_type == "Web URL":
+        url = st.text_input("Enter URL (e.g., article, blog, docs)")
+        if st.button("Fetch Content"):
+            with st.spinner("Scraping Webpage..."):
+                try:
+                    docs.extend(WebBaseLoader(url).load())
+                    create_vectorstore(docs)
+                    st.success("Web Content Indexed!")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
-    if st.button("Reset System"):
+    st.markdown("---")
+    if st.button("Reset Everything"):
         if os.path.exists("vectorstore"):
             shutil.rmtree("vectorstore")
         st.session_state.chat_history = []
         st.rerun()
 
 # ==============================
-# 📥 INGEST DATA
-# ==============================
-if process:
-    docs = []
-    with st.spinner("Processing..."):
-        try:
-            if source == "PDF" and files:
-                for f in files:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                        tmp.write(f.read())
-                        docs.extend(PyPDFLoader(tmp.name).load())
-                        os.remove(tmp.name)
-            elif source == "Web" and url:
-                docs.extend(WebBaseLoader(url).load())
-
-            if docs:
-                create_vectorstore(docs)
-                st.success("Knowledge Base Ready ✅")
-            else:
-                st.warning("No data found")
-        except Exception as e:
-            st.error(str(e))
-
-# ==============================
-# 💬 DISPLAY CHAT
+# 💬 CHAT DISPLAY
 # ==============================
 for message in st.session_state.chat_history:
     role = "user" if isinstance(message, HumanMessage) else "assistant"
@@ -213,49 +205,37 @@ for message in st.session_state.chat_history:
         st.markdown(message.content)
 
 # ==============================
-# 💬 CHAT SYSTEM
+# 💬 CHAT LOGIC
 # ==============================
-query = st.chat_input("Ask about Assignment-3...")
+query = st.chat_input("How can I help you today?")
 
 if query:
     st.chat_message("user").markdown(query)
-
     vs = load_vectorstore()
     
-    # ==========================
-    # 🔍 RAG MODE (langchain_classic)
-    # ==========================
-    if vs:
-        # 1. Create history aware retriever
+    # Check if we should use RAG or Normal LLM logic
+    if vs and source_type != "None (General Chat)":
+        # 1. RAG CHAIN LOGIC (PREVIOUS LOGIC PRESERVED)
         retriever_prompt = ChatPromptTemplate.from_messages([
             MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
-            ("system", "Given the above conversation, generate a search query to look up in the context.")
+            ("system", "Generate a search query to look up the relevant context for the user request.")
         ])
         
         retriever = create_history_aware_retriever(llm, vs.as_retriever(search_kwargs={"k": 5}), retriever_prompt)
-        
-        # 2. Create the document chain
         document_chain = create_stuff_documents_chain(llm, get_rag_prompt())
-        
-        # 3. Create the final retrieval chain
         retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
-        with st.spinner("🧠 Analyzing assignment context..."):
+        with st.spinner("🧐 Analyzing sources..."):
             result = retrieval_chain.invoke({
                 "input": query,
                 "chat_history": st.session_state.chat_history
             })
             answer = result["answer"]
-
-    # ==========================
-    # 🤖 NORMAL MODE
-    # ==========================
     else:
-        with st.spinner("🤖 Thinking..."):
-            prompt_template = get_normal_prompt()
-            # Manually formatting the prompt for the direct LLM call
-            chain = prompt_template | llm
+        # 2. NORMAL MODE (GENERAL SEARCHING/CHAT)
+        with st.spinner("💭 Thinking..."):
+            chain = get_normal_prompt() | llm
             response = chain.invoke({
                 "input": query, 
                 "chat_history": st.session_state.chat_history
@@ -267,17 +247,13 @@ if query:
     # ==========================
     with st.chat_message("assistant"):
         st.markdown(answer)
-        
         st.download_button(
-            "📄 Download Report",
+            "📥 Download Response as PDF",
             generate_pdf_summary(answer),
-            f"report_{int(time.time())}.pdf"
+            f"genzai_response_{int(time.time())}.pdf"
         )
 
     st.session_state.chat_history.extend([
         HumanMessage(content=query),
         AIMessage(content=answer)
     ])
-
-if not os.path.exists(DB_PATH):
-    st.info("💡 General Mode: Upload Assignment-3.pdf for context-specific answers.")
