@@ -6,11 +6,11 @@ import time
 from io import BytesIO
 from dotenv import load_dotenv
 
-# PDF
+# PDF Generation
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-# LangChain
+# LangChain - Using the specific langchain_classic chains as requested
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
@@ -97,8 +97,9 @@ def generate_pdf_summary(text):
     content.append(Spacer(1, 12))
 
     for line in text.split("\n"):
-        content.append(Paragraph(line, styles["Normal"]))
-        content.append(Spacer(1, 8))
+        if line.strip():
+            content.append(Paragraph(line, styles["Normal"]))
+            content.append(Spacer(1, 8))
 
     doc.build(content)
     buffer.seek(0)
@@ -119,18 +120,20 @@ def load_vectorstore():
     return None
 
 # ==============================
-# 🧠 PROMPTS (FIXED)
+# 🧠 PROMPTS
 # ==============================
+# Improved prompt to handle tables and calculations from your assignment accurately
 def get_rag_prompt():
     return ChatPromptTemplate.from_messages([
         ("system",
-         "You are an AI tutor.\n\n"
-         "Use the provided context to answer the question.\n\n"
+         "You are an expert AI tutor helping with a Machine Learning assignment.\n\n"
+         "Use the provided context to answer the question. If the context contains a data table, "
+         "read every row carefully before performing calculations (like Naive Bayes or ID3).\n\n"
          "Context:\n{context}\n\n"
          "Instructions:\n"
-         "1. Explain clearly in simple words.\n"
-         "2. Then give Python code.\n"
-         "3. Format code like:\n```python\ncode\n```\n"
+         "1. Show step-by-step mathematical work for numerical problems.\n"
+         "2. Provide a clear Python implementation using libraries like NumPy or Scikit-Learn if relevant.\n"
+         "3. Format code strictly using ```python blocks."
         ),
         MessagesPlaceholder("chat_history"),
         ("human", "{input}")
@@ -139,29 +142,17 @@ def get_rag_prompt():
 def get_normal_prompt():
     return ChatPromptTemplate.from_messages([
         ("system",
-         "You are an AI tutor.\n\n"
-         "Explain clearly and provide Python code when needed.\n"
-         "Format properly using markdown."
+         "You are a helpful AI tutor. Explain clearly and provide Python code examples when relevant."
         ),
         MessagesPlaceholder("chat_history"),
         ("human", "{input}")
     ])
 
 # ==============================
-# 🧹 CLEAN RESPONSE
-# ==============================
-def clean_response(text):
-    text = text.replace("python def", "```python\ndef")
-    if "```python" in text and text.count("```") % 2 != 0:
-        text += "\n```"
-    return text
-
-# ==============================
 # 🎯 HEADER
 # ==============================
 st.markdown('<p class="hero-text">🤖 GENZ-AI</p>', unsafe_allow_html=True)
-st.markdown('<p class="hero-sub">AI Tutor + RAG System</p>', unsafe_allow_html=True)
-st.markdown("<div style='text-align:center; color:#22c55e;'>● Online</div>", unsafe_allow_html=True)
+st.markdown('<p class="hero-sub">AI Tutor + RAG System (Classic Edition)</p>', unsafe_allow_html=True)
 
 # ==============================
 # 💬 SESSION
@@ -174,7 +165,6 @@ if "chat_history" not in st.session_state:
 # ==============================
 with st.sidebar:
     st.header("Control Panel")
-
     source = st.radio("Select Source", ["PDF", "Web"])
 
     if source == "PDF":
@@ -203,7 +193,6 @@ if process:
                         tmp.write(f.read())
                         docs.extend(PyPDFLoader(tmp.name).load())
                         os.remove(tmp.name)
-
             elif source == "Web" and url:
                 docs.extend(WebBaseLoader(url).load())
 
@@ -212,7 +201,6 @@ if process:
                 st.success("Knowledge Base Ready ✅")
             else:
                 st.warning("No data found")
-
         except Exception as e:
             st.error(str(e))
 
@@ -227,40 +215,37 @@ for message in st.session_state.chat_history:
 # ==============================
 # 💬 CHAT SYSTEM
 # ==============================
-query = st.chat_input("Ask anything...")
+query = st.chat_input("Ask about Assignment-3...")
 
 if query:
     st.chat_message("user").markdown(query)
 
     vs = load_vectorstore()
-    rag_prompt = get_rag_prompt()
-    normal_prompt = get_normal_prompt()
-
+    
     # ==========================
-    # 🔍 RAG MODE
+    # 🔍 RAG MODE (langchain_classic)
     # ==========================
     if vs:
-        retriever = create_history_aware_retriever(
-            llm,
-            vs.as_retriever(search_kwargs={"k": 3}),
-            ChatPromptTemplate.from_messages([
-                ("system", "Convert conversation into standalone query"),
-                MessagesPlaceholder("chat_history"),
-                ("human", "{input}")
-            ])
-        )
+        # 1. Create history aware retriever
+        retriever_prompt = ChatPromptTemplate.from_messages([
+            MessagesPlaceholder("chat_history"),
+            ("human", "{input}"),
+            ("system", "Given the above conversation, generate a search query to look up in the context.")
+        ])
+        
+        retriever = create_history_aware_retriever(llm, vs.as_retriever(search_kwargs={"k": 5}), retriever_prompt)
+        
+        # 2. Create the document chain
+        document_chain = create_stuff_documents_chain(llm, get_rag_prompt())
+        
+        # 3. Create the final retrieval chain
+        retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
-        chain = create_retrieval_chain(
-            retriever,
-            create_stuff_documents_chain(llm, rag_prompt)
-        )
-
-        with st.spinner("🧠 Thinking with knowledge..."):
-            result = chain.invoke({
+        with st.spinner("🧠 Analyzing assignment context..."):
+            result = retrieval_chain.invoke({
                 "input": query,
                 "chat_history": st.session_state.chat_history
             })
-
             answer = result["answer"]
 
     # ==========================
@@ -268,37 +253,25 @@ if query:
     # ==========================
     else:
         with st.spinner("🤖 Thinking..."):
-            response = llm.invoke(
-                normal_prompt.format_messages(
-                    input=query,
-                    chat_history=st.session_state.chat_history
-                )
-            )
+            prompt_template = get_normal_prompt()
+            # Manually formatting the prompt for the direct LLM call
+            chain = prompt_template | llm
+            response = chain.invoke({
+                "input": query, 
+                "chat_history": st.session_state.chat_history
+            })
             answer = response.content
 
     # ==========================
-    # 🧹 CLEAN OUTPUT
-    # ==========================
-    answer = clean_response(answer)
-
-    # ==========================
-    # ✨ STREAM OUTPUT
+    # ✨ DISPLAY & DOWNLOAD
     # ==========================
     with st.chat_message("assistant"):
-        msg = st.empty()
-        full = ""
-
-        for word in answer.split():
-            full += word + " "
-            msg.markdown(full + "▌", unsafe_allow_html=True)
-            time.sleep(0.02)
-
-        msg.markdown(full, unsafe_allow_html=True)
-
+        st.markdown(answer)
+        
         st.download_button(
             "📄 Download Report",
             generate_pdf_summary(answer),
-            "report.pdf"
+            f"report_{int(time.time())}.pdf"
         )
 
     st.session_state.chat_history.extend([
@@ -306,8 +279,5 @@ if query:
         AIMessage(content=answer)
     ])
 
-# ==============================
-# 📢 FOOTER
-# ==============================
 if not os.path.exists(DB_PATH):
-    st.info("💡 Running in General Mode (No Knowledge Loaded)")
+    st.info("💡 General Mode: Upload Assignment-3.pdf for context-specific answers.")
