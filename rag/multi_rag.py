@@ -34,7 +34,7 @@ if not GROQ_API_KEY:
 # ==============================
 # ⚙️ CONFIG
 # ==============================
-st.set_page_config(page_title="GENZ-AI | Universal", layout="wide")
+st.set_page_config(page_title="GENZ-AI Chatbot", layout="wide")
 DB_PATH = "vectorstore/db_faiss"
 
 # ==============================
@@ -94,7 +94,7 @@ def generate_pdf_summary(text):
     styles = getSampleStyleSheet()
 
     content = []
-    content.append(Paragraph("GENZ-AI Insights Report", styles["Title"]))
+    content.append(Paragraph("GENZ-AI Insights ", styles["Title"]))
     content.append(Spacer(1, 12))
 
     for line in text.split("\n"):
@@ -152,7 +152,7 @@ def get_normal_prompt():
 # 🎯 HEADER
 # ==============================
 st.markdown('<p class="hero-text">GENZ-AI</p>', unsafe_allow_html=True)
-st.markdown('<p class="hero-sub">Universal AI Assistant: PDF Research • Web Analysis • General Chat</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-sub">AI Chatbot Assistant: PDF Research • Web Analysis • General Chat</p>', unsafe_allow_html=True)
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
@@ -161,14 +161,14 @@ if "chat_history" not in st.session_state:
 # 📂 SIDEBAR (Source Selection)
 # ==============================
 with st.sidebar:
-    st.header("🛠️ Configuration")
-    source_type = st.selectbox("Intelligence Source", ["None (General Chat)", "PDF Upload", "Web URL"])
+    st.header("SLIDEBAR")
+    source_type = st.selectbox("SELECT Source", ["None (General Chat)", "PDF Upload", "Web URL"])
 
     docs = []
     if source_type == "PDF Upload":
         files = st.file_uploader("Upload Documents", type="pdf", accept_multiple_files=True)
-        if st.button("Index PDFs"):
-            with st.spinner("Reading PDFs..."):
+        if st.button("Analyse PDFs"):
+            with st.spinner("Reading PDF/PDFs..."):
                 for f in files:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                         tmp.write(f.read())
@@ -226,7 +226,7 @@ if query:
         document_chain = create_stuff_documents_chain(llm, get_rag_prompt())
         retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
-        with st.spinner("🧐 Analyzing sources..."):
+        with st.spinner(" Analyzing sources..."):
             result = retrieval_chain.invoke({
                 "input": query,
                 "chat_history": st.session_state.chat_history
