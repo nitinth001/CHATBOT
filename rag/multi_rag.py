@@ -119,7 +119,7 @@ def generate_pdf_summary(text):
     styles = getSampleStyleSheet()
 
     content = []
-    content.append(Paragraph("GENZ-AI Insight Report", styles["Title"]))
+    content.append(Paragraph("GENZ-AI Insights", styles["Title"]))
     content.append(Spacer(1, 12))
 
     for line in text.split("\n"):
@@ -147,8 +147,8 @@ def load_vectorstore():
 # ==============================
 # 🎯 HEADER
 # ==============================
-st.markdown('<p class="hero-text">🤖 GENZ-AI</p>', unsafe_allow_html=True)
-st.markdown('<p class="hero-sub">Your Intelligent AI Research Assistant</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-text"> GENZ-AI</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-sub">Your Intelligent AI Assistant</p>', unsafe_allow_html=True)
 st.markdown("<div style='text-align:center; color:#22c55e;'>● Online • AI Ready</div>", unsafe_allow_html=True)
 
 # ==============================
@@ -161,7 +161,7 @@ if "chat_history" not in st.session_state:
 # 📂 SIDEBAR
 # ==============================
 with st.sidebar:
-    st.header("⚙️ Control Panel")
+    st.header("Slidebar")
 
     source = st.radio("Select Source", ["PDF", "Web"])
 
@@ -198,7 +198,7 @@ if process:
 
             if docs:
                 create_vectorstore(docs)
-                st.success("Knowledge Base Ready ✅")
+                st.success("EVERYTHING ANALYSED PROPERLY ✅")
             else:
                 st.warning("No data found")
 
