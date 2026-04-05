@@ -48,10 +48,10 @@ st.markdown("""
     font-family: 'Inter', sans-serif;
 }
 .hero-text {
-    font-size: 3.2rem;
+    font-size: 3rem;
     font-weight: 800;
     text-align: center;
-    background: linear-gradient(90deg, #38bdf8, #6366f1, #8b5cf6);
+    background: linear-gradient(90deg, #38bdf8, #6366f1);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
@@ -62,11 +62,6 @@ st.markdown("""
 [data-testid="stSidebar"] {
     background: rgba(15, 23, 42, 0.7);
     backdrop-filter: blur(20px);
-}
-.stChatInputContainer {
-    background: rgba(15, 23, 42, 0.7) !important;
-    backdrop-filter: blur(12px);
-    border-radius: 20px;
 }
 header, footer {visibility: hidden;}
 </style>
@@ -90,7 +85,7 @@ llm = load_llm()
 embeddings = load_embeddings()
 
 # ==============================
-# 📄 PDF
+# 📄 PDF GENERATOR
 # ==============================
 def generate_pdf_summary(text):
     buffer = BytesIO()
@@ -124,18 +119,29 @@ def load_vectorstore():
     return None
 
 # ==============================
-# 🧠 PROMPT (FIXED)
+# 🧠 PROMPTS (FIXED)
 # ==============================
-def get_prompt():
+def get_rag_prompt():
     return ChatPromptTemplate.from_messages([
         ("system",
          "You are an AI tutor.\n\n"
-         "For every question:\n"
-         "1. First explain in simple words.\n"
+         "Use the provided context to answer the question.\n\n"
+         "Context:\n{context}\n\n"
+         "Instructions:\n"
+         "1. Explain clearly in simple words.\n"
          "2. Then give Python code.\n"
-         "3. ALWAYS format code like:\n"
-         "```python\ncode here\n```\n"
-         "4. Separate each question clearly.\n"
+         "3. Format code like:\n```python\ncode\n```\n"
+        ),
+        MessagesPlaceholder("chat_history"),
+        ("human", "{input}")
+    ])
+
+def get_normal_prompt():
+    return ChatPromptTemplate.from_messages([
+        ("system",
+         "You are an AI tutor.\n\n"
+         "Explain clearly and provide Python code when needed.\n"
+         "Format properly using markdown."
         ),
         MessagesPlaceholder("chat_history"),
         ("human", "{input}")
@@ -154,7 +160,7 @@ def clean_response(text):
 # 🎯 HEADER
 # ==============================
 st.markdown('<p class="hero-text">🤖 GENZ-AI</p>', unsafe_allow_html=True)
-st.markdown('<p class="hero-sub">AI Tutor + Research Assistant</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-sub">AI Tutor + RAG System</p>', unsafe_allow_html=True)
 st.markdown("<div style='text-align:center; color:#22c55e;'>● Online</div>", unsafe_allow_html=True)
 
 # ==============================
@@ -185,7 +191,7 @@ with st.sidebar:
         st.rerun()
 
 # ==============================
-# 📥 INGEST
+# 📥 INGEST DATA
 # ==============================
 if process:
     docs = []
@@ -203,7 +209,7 @@ if process:
 
             if docs:
                 create_vectorstore(docs)
-                st.success("Knowledge Base Ready")
+                st.success("Knowledge Base Ready ✅")
             else:
                 st.warning("No data found")
 
@@ -219,7 +225,7 @@ for message in st.session_state.chat_history:
         st.markdown(message.content)
 
 # ==============================
-# 💬 CHAT
+# 💬 CHAT SYSTEM
 # ==============================
 query = st.chat_input("Ask anything...")
 
@@ -227,37 +233,52 @@ if query:
     st.chat_message("user").markdown(query)
 
     vs = load_vectorstore()
-    prompt = get_prompt()
+    rag_prompt = get_rag_prompt()
+    normal_prompt = get_normal_prompt()
 
+    # ==========================
+    # 🔍 RAG MODE
+    # ==========================
     if vs:
         retriever = create_history_aware_retriever(
             llm,
             vs.as_retriever(search_kwargs={"k": 3}),
-            prompt
+            ChatPromptTemplate.from_messages([
+                ("system", "Convert conversation into standalone query"),
+                MessagesPlaceholder("chat_history"),
+                ("human", "{input}")
+            ])
         )
 
         chain = create_retrieval_chain(
             retriever,
-            create_stuff_documents_chain(llm, prompt)
+            create_stuff_documents_chain(llm, rag_prompt)
         )
 
-        res = chain.invoke({
-            "input": query,
-            "chat_history": st.session_state.chat_history
-        })
+        with st.spinner("🧠 Thinking with knowledge..."):
+            result = chain.invoke({
+                "input": query,
+                "chat_history": st.session_state.chat_history
+            })
 
-        answer = res["answer"]
+            answer = result["answer"]
 
+    # ==========================
+    # 🤖 NORMAL MODE
+    # ==========================
     else:
-        response = llm.invoke(
-            prompt.format_messages(
-                input=query,
-                chat_history=st.session_state.chat_history
+        with st.spinner("🤖 Thinking..."):
+            response = llm.invoke(
+                normal_prompt.format_messages(
+                    input=query,
+                    chat_history=st.session_state.chat_history
+                )
             )
-        )
-        answer = response.content
+            answer = response.content
 
-    # ✅ FIX OUTPUT
+    # ==========================
+    # 🧹 CLEAN OUTPUT
+    # ==========================
     answer = clean_response(answer)
 
     # ==========================
@@ -289,4 +310,4 @@ if query:
 # 📢 FOOTER
 # ==============================
 if not os.path.exists(DB_PATH):
-    st.info("💡 Running in General Mode")
+    st.info("💡 Running in General Mode (No Knowledge Loaded)")
