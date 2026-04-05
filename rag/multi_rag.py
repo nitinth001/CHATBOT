@@ -35,11 +35,10 @@ if not GROQ_API_KEY:
 # ⚙️ CONFIG
 # ==============================
 st.set_page_config(page_title="GENZ-AI", layout="wide")
-
 DB_PATH = "vectorstore/db_faiss"
 
 # ==============================
-# 🎨 MODERN AI UI CSS
+# 🎨 MODERN UI
 # ==============================
 st.markdown("""
 <style>
@@ -48,7 +47,6 @@ st.markdown("""
     color: #e2e8f0;
     font-family: 'Inter', sans-serif;
 }
-
 .hero-text {
     font-size: 3.2rem;
     font-weight: 800;
@@ -57,44 +55,25 @@ st.markdown("""
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
-
 .hero-sub {
     text-align: center;
     color: #94a3b8;
-    margin-bottom: 20px;
 }
-
 [data-testid="stSidebar"] {
     background: rgba(15, 23, 42, 0.7);
     backdrop-filter: blur(20px);
 }
-
 .stChatInputContainer {
     background: rgba(15, 23, 42, 0.7) !important;
     backdrop-filter: blur(12px);
     border-radius: 20px;
 }
-
-[data-testid="stChatMessage"] {
-    border-radius: 15px;
-    padding: 10px;
-}
-
-.stButton>button {
-    background: linear-gradient(90deg, #6366f1, #8b5cf6);
-    color: white;
-    border-radius: 10px;
-    border: none;
-}
-
-header, footer {
-    visibility: hidden;
-}
+header, footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================
-# 🤖 LOAD MODELS
+# 🤖 MODELS
 # ==============================
 @st.cache_resource
 def load_llm():
@@ -111,7 +90,7 @@ llm = load_llm()
 embeddings = load_embeddings()
 
 # ==============================
-# 📄 PDF GENERATOR
+# 📄 PDF
 # ==============================
 def generate_pdf_summary(text):
     buffer = BytesIO()
@@ -119,7 +98,7 @@ def generate_pdf_summary(text):
     styles = getSampleStyleSheet()
 
     content = []
-    content.append(Paragraph("GENZ-AI Insights", styles["Title"]))
+    content.append(Paragraph("GENZ-AI Insight Report", styles["Title"]))
     content.append(Spacer(1, 12))
 
     for line in text.split("\n"):
@@ -145,11 +124,38 @@ def load_vectorstore():
     return None
 
 # ==============================
+# 🧠 PROMPT (FIXED)
+# ==============================
+def get_prompt():
+    return ChatPromptTemplate.from_messages([
+        ("system",
+         "You are an AI tutor.\n\n"
+         "For every question:\n"
+         "1. First explain in simple words.\n"
+         "2. Then give Python code.\n"
+         "3. ALWAYS format code like:\n"
+         "```python\ncode here\n```\n"
+         "4. Separate each question clearly.\n"
+        ),
+        MessagesPlaceholder("chat_history"),
+        ("human", "{input}")
+    ])
+
+# ==============================
+# 🧹 CLEAN RESPONSE
+# ==============================
+def clean_response(text):
+    text = text.replace("python def", "```python\ndef")
+    if "```python" in text and text.count("```") % 2 != 0:
+        text += "\n```"
+    return text
+
+# ==============================
 # 🎯 HEADER
 # ==============================
-st.markdown('<p class="hero-text"> GENZ-AI</p>', unsafe_allow_html=True)
-st.markdown('<p class="hero-sub">Your Intelligent AI Assistant</p>', unsafe_allow_html=True)
-st.markdown("<div style='text-align:center; color:#22c55e;'>● Online • AI Ready</div>", unsafe_allow_html=True)
+st.markdown('<p class="hero-text">🤖 GENZ-AI</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-sub">AI Tutor + Research Assistant</p>', unsafe_allow_html=True)
+st.markdown("<div style='text-align:center; color:#22c55e;'>● Online</div>", unsafe_allow_html=True)
 
 # ==============================
 # 💬 SESSION
@@ -161,7 +167,7 @@ if "chat_history" not in st.session_state:
 # 📂 SIDEBAR
 # ==============================
 with st.sidebar:
-    st.header("Slidebar")
+    st.header("Control Panel")
 
     source = st.radio("Select Source", ["PDF", "Web"])
 
@@ -176,15 +182,14 @@ with st.sidebar:
         if os.path.exists("vectorstore"):
             shutil.rmtree("vectorstore")
         st.session_state.chat_history = []
-        st.success("System Reset Done")
         st.rerun()
 
 # ==============================
-# 📥 INGEST DATA
+# 📥 INGEST
 # ==============================
 if process:
     docs = []
-    with st.spinner("🚀 Processing..."):
+    with st.spinner("Processing..."):
         try:
             if source == "PDF" and files:
                 for f in files:
@@ -198,7 +203,7 @@ if process:
 
             if docs:
                 create_vectorstore(docs)
-                st.success("EVERYTHING ANALYSED PROPERLY ✅")
+                st.success("Knowledge Base Ready")
             else:
                 st.warning("No data found")
 
@@ -214,7 +219,7 @@ for message in st.session_state.chat_history:
         st.markdown(message.content)
 
 # ==============================
-# 🧠 CHAT LOGIC
+# 💬 CHAT
 # ==============================
 query = st.chat_input("Ask anything...")
 
@@ -222,28 +227,18 @@ if query:
     st.chat_message("user").markdown(query)
 
     vs = load_vectorstore()
+    prompt = get_prompt()
 
     if vs:
         retriever = create_history_aware_retriever(
             llm,
             vs.as_retriever(search_kwargs={"k": 3}),
-            ChatPromptTemplate.from_messages([
-                ("system", "Convert to standalone query"),
-                MessagesPlaceholder("chat_history"),
-                ("human", "{input}")
-            ])
+            prompt
         )
 
         chain = create_retrieval_chain(
             retriever,
-            create_stuff_documents_chain(
-                llm,
-                ChatPromptTemplate.from_messages([
-                    ("system", "Use context if helpful.\nContext: {context}"),
-                    MessagesPlaceholder("chat_history"),
-                    ("human", "{input}")
-                ])
-            )
+            create_stuff_documents_chain(llm, prompt)
         )
 
         res = chain.invoke({
@@ -255,16 +250,15 @@ if query:
 
     else:
         response = llm.invoke(
-            ChatPromptTemplate.from_messages([
-                ("system", "You are a helpful AI"),
-                MessagesPlaceholder("chat_history"),
-                ("human", "{input}")
-            ]).format_messages(
+            prompt.format_messages(
                 input=query,
                 chat_history=st.session_state.chat_history
             )
         )
         answer = response.content
+
+    # ✅ FIX OUTPUT
+    answer = clean_response(answer)
 
     # ==========================
     # ✨ STREAM OUTPUT
@@ -275,10 +269,10 @@ if query:
 
         for word in answer.split():
             full += word + " "
-            msg.markdown(full + "▌")
+            msg.markdown(full + "▌", unsafe_allow_html=True)
             time.sleep(0.02)
 
-        msg.markdown(full)
+        msg.markdown(full, unsafe_allow_html=True)
 
         st.download_button(
             "📄 Download Report",
@@ -295,4 +289,4 @@ if query:
 # 📢 FOOTER
 # ==============================
 if not os.path.exists(DB_PATH):
-    st.info("💡 Running in General Mode (No Knowledge Loaded)")
+    st.info("💡 Running in General Mode")
