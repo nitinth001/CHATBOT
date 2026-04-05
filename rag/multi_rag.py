@@ -22,10 +22,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 
 # ==============================
-# 🔐 LOAD ENV VARIABLES
+# 🔐 ENV SETUP
 # ==============================
 load_dotenv()
-
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 if not GROQ_API_KEY:
@@ -38,6 +37,61 @@ if not GROQ_API_KEY:
 st.set_page_config(page_title="GENZ-AI", layout="wide")
 
 DB_PATH = "vectorstore/db_faiss"
+
+# ==============================
+# 🎨 MODERN AI UI CSS
+# ==============================
+st.markdown("""
+<style>
+.stApp {
+    background: radial-gradient(circle at top, #0f172a, #020617);
+    color: #e2e8f0;
+    font-family: 'Inter', sans-serif;
+}
+
+.hero-text {
+    font-size: 3.2rem;
+    font-weight: 800;
+    text-align: center;
+    background: linear-gradient(90deg, #38bdf8, #6366f1, #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.hero-sub {
+    text-align: center;
+    color: #94a3b8;
+    margin-bottom: 20px;
+}
+
+[data-testid="stSidebar"] {
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(20px);
+}
+
+.stChatInputContainer {
+    background: rgba(15, 23, 42, 0.7) !important;
+    backdrop-filter: blur(12px);
+    border-radius: 20px;
+}
+
+[data-testid="stChatMessage"] {
+    border-radius: 15px;
+    padding: 10px;
+}
+
+.stButton>button {
+    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    color: white;
+    border-radius: 10px;
+    border: none;
+}
+
+header, footer {
+    visibility: hidden;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ==============================
 # 🤖 LOAD MODELS
@@ -57,7 +111,7 @@ llm = load_llm()
 embeddings = load_embeddings()
 
 # ==============================
-# 📄 PDF GENERATOR (IMPROVED)
+# 📄 PDF GENERATOR
 # ==============================
 def generate_pdf_summary(text):
     buffer = BytesIO()
@@ -77,31 +131,29 @@ def generate_pdf_summary(text):
     return buffer
 
 # ==============================
-# 🧠 VECTOR STORE HANDLING
+# 🧠 VECTOR STORE
 # ==============================
 def create_vectorstore(docs):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
     splits = splitter.split_documents(docs)
-
     vs = FAISS.from_documents(splits, embeddings)
     vs.save_local(DB_PATH)
 
-
 def load_vectorstore():
     if os.path.exists(DB_PATH):
-        return FAISS.load_local(
-            DB_PATH,
-            embeddings,
-            allow_dangerous_deserialization=True
-        )
+        return FAISS.load_local(DB_PATH, embeddings, allow_dangerous_deserialization=True)
     return None
 
 # ==============================
-# 🎨 UI
+# 🎯 HEADER
 # ==============================
-st.title("😎 GENZ-AI")
-st.caption("Next Gen AI Intelligence System")
+st.markdown('<p class="hero-text">🤖 GENZ-AI</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-sub">Your Intelligent AI Research Assistant</p>', unsafe_allow_html=True)
+st.markdown("<div style='text-align:center; color:#22c55e;'>● Online • AI Ready</div>", unsafe_allow_html=True)
 
+# ==============================
+# 💬 SESSION
+# ==============================
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -128,92 +180,86 @@ with st.sidebar:
         st.rerun()
 
 # ==============================
-# 📥 DATA INGESTION
+# 📥 INGEST DATA
 # ==============================
 if process:
     docs = []
-
-    with st.spinner("Processing..."):
+    with st.spinner("🚀 Processing..."):
         try:
             if source == "PDF" and files:
                 for f in files:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                         tmp.write(f.read())
-                        path = tmp.name
-
-                    docs.extend(PyPDFLoader(path).load())
-                    os.remove(path)
+                        docs.extend(PyPDFLoader(tmp.name).load())
+                        os.remove(tmp.name)
 
             elif source == "Web" and url:
                 docs.extend(WebBaseLoader(url).load())
 
             if docs:
                 create_vectorstore(docs)
-                st.success("Vector DB Created ✅")
+                st.success("Knowledge Base Ready ✅")
             else:
                 st.warning("No data found")
 
         except Exception as e:
-            st.error(f"Error: {str(e)}")
+            st.error(str(e))
 
 # ==============================
-# 💬 CHAT SYSTEM
+# 💬 DISPLAY CHAT
 # ==============================
-query = st.chat_input("Ask something...")
+for message in st.session_state.chat_history:
+    role = "user" if isinstance(message, HumanMessage) else "assistant"
+    with st.chat_message(role):
+        st.markdown(message.content)
+
+# ==============================
+# 🧠 CHAT LOGIC
+# ==============================
+query = st.chat_input("Ask anything...")
 
 if query:
     st.chat_message("user").markdown(query)
 
     vs = load_vectorstore()
 
-    # ==========================
-    # 🔍 RAG MODE
-    # ==========================
     if vs:
-        retriever_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Convert conversation into standalone query"),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}")
-        ])
-
         retriever = create_history_aware_retriever(
             llm,
             vs.as_retriever(search_kwargs={"k": 3}),
-            retriever_prompt
+            ChatPromptTemplate.from_messages([
+                ("system", "Convert to standalone query"),
+                MessagesPlaceholder("chat_history"),
+                ("human", "{input}")
+            ])
         )
-
-        qa_prompt = ChatPromptTemplate.from_messages([
-            ("system",
-             "Use context if relevant. Otherwise answer normally.\nContext: {context}"),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}")
-        ])
 
         chain = create_retrieval_chain(
             retriever,
-            create_stuff_documents_chain(llm, qa_prompt)
+            create_stuff_documents_chain(
+                llm,
+                ChatPromptTemplate.from_messages([
+                    ("system", "Use context if helpful.\nContext: {context}"),
+                    MessagesPlaceholder("chat_history"),
+                    ("human", "{input}")
+                ])
+            )
         )
 
-        with st.spinner("Thinking..."):
-            res = chain.invoke({
-                "input": query,
-                "chat_history": st.session_state.chat_history
-            })
+        res = chain.invoke({
+            "input": query,
+            "chat_history": st.session_state.chat_history
+        })
 
-            answer = res["answer"]
+        answer = res["answer"]
 
-    # ==========================
-    # 🤖 NORMAL MODE
-    # ==========================
     else:
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are a helpful AI assistant"),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}")
-        ])
-
         response = llm.invoke(
-            prompt.format_messages(
+            ChatPromptTemplate.from_messages([
+                ("system", "You are a helpful AI"),
+                MessagesPlaceholder("chat_history"),
+                ("human", "{input}")
+            ]).format_messages(
                 input=query,
                 chat_history=st.session_state.chat_history
             )
@@ -221,7 +267,7 @@ if query:
         answer = response.content
 
     # ==========================
-    # 🖥️ STREAM OUTPUT
+    # ✨ STREAM OUTPUT
     # ==========================
     with st.chat_message("assistant"):
         msg = st.empty()
@@ -240,14 +286,13 @@ if query:
             "report.pdf"
         )
 
-    # Save history
     st.session_state.chat_history.extend([
         HumanMessage(content=query),
         AIMessage(content=answer)
     ])
 
 # ==============================
-# 🧾 FOOTER
+# 📢 FOOTER
 # ==============================
 if not os.path.exists(DB_PATH):
-    st.info("ℹ️ Running in General Mode (No Documents Loaded)")
+    st.info("💡 Running in General Mode (No Knowledge Loaded)")
